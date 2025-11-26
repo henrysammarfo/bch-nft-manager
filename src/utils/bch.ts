@@ -77,7 +77,7 @@ export class WalletService {
         };
 
         const ipfsCid = await this.uploadToIPFS(metadata);
-        const commitment = toHex(ipfsCid);
+        const commitment = toHex(ipfsCid).substring(0, 40);
 
         // @ts-expect-error mainnet-js is not fully typed
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
@@ -126,7 +126,7 @@ export class WalletService {
         if (!this.wallet) throw new Error("Wallet not initialized");
 
         const newIpfsCid = await this.uploadToIPFS(newMetadata);
-        const newCommitment = toHex(newIpfsCid);
+        const newCommitment = toHex(newIpfsCid).substring(0, 40);
 
         // @ts-expect-error mainnet-js is not fully typed
         const addr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
