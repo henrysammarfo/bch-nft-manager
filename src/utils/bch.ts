@@ -1,7 +1,18 @@
 import { TestNetWallet, Config } from 'mainnet-js';
+import axios from 'axios';
 
 // @ts-ignore
 Config.EnforceCashToken = true;
+
+const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
+const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
+
+// Helper to convert string to hex
+const toHex = (str: string) => Buffer.from(str, 'utf8').toString('hex');
+
+// Helper to convert hex to string
+const fromHex = (hex: string) => Buffer.from(hex, 'hex').toString('utf8');
+
 
 export class WalletService {
     private wallet: TestNetWallet | null = null;
@@ -31,8 +42,33 @@ export class WalletService {
         return this.wallet;
     }
 
+    private async uploadToIPFS(metadata: any): Promise<string> {
+        if (!PINATA_JWT) {
+            throw new Error("VITE_PINATA_JWT is not set in .env file");
+        }
+
+        const response = await axios.post('https://api.pinata.cloud/pinning/pinJSONToIPFS', metadata, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${PINATA_JWT}`
+            }
+        });
+
+        return response.data.IpfsHash;
+    }
+
     async mintNFT(name: string, description: string, imageUrl: string, videoUrl?: string): Promise<string> {
         if (!this.wallet) throw new Error("Wallet not initialized");
+
+        const metadata = {
+            name,
+            description,
+            image: imageUrl,
+            ...(videoUrl && { animation_url: videoUrl })
+        };
+
+        const ipfsCid = await this.uploadToIPFS(metadata);
+        const commitment = toHex(`ipfs://${ipfsCid}`);
 
         // @ts-ignore
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
@@ -40,98 +76,66 @@ export class WalletService {
         const result = await this.wallet.tokenGenesis({
             cashaddr: walletAddr,
             amount: 0n,
-            capability: 'minting',  // Use 'minting' to allow updates via tokenMint()
-            commitment: '00',
+            capability: 'minting',
+            commitment: commitment,
             value: 1000,
         });
 
-        const tokenId = result.tokenIds?.[0];
-        if (tokenId) {
-            this.saveLocalMetadata(tokenId, { name, description, imageUrl, videoUrl });
-        }
-
-        return tokenId || "";
-    }
-
-    private saveLocalMetadata(tokenId: string, metadata: any) {
-        const existing = JSON.parse(localStorage.getItem('nft_metadata') || '{}');
-        existing[tokenId] = metadata;
-        localStorage.setItem('nft_metadata', JSON.stringify(existing));
-    }
-
-    getLocalMetadata(tokenId: string) {
-        const existing = JSON.parse(localStorage.getItem('nft_metadata') || '{}');
-        return existing[tokenId];
+        return result.tokenIds?.[0] || "";
     }
 
     async getNFTs(): Promise<any[]> {
         if (!this.wallet) return [];
 
-        // Get all token UTXOs
-        const utxos = await this.wallet.getTokenUtxos();
-        console.log("Raw Token UTXOs:", utxos);
-
-        // Also check all UTXOs (including unconfirmed)
         const allUtxos = await this.wallet.getUtxos();
-        console.log("ALL UTXOs (including unconfirmed):", allUtxos);
+        const tokenUtxos = allUtxos.filter((u: any) => u.token);
 
-        // Filter for token UTXOs from all UTXOs
-        const tokenUtxosFromAll = allUtxos.filter((u: any) => u.token);
-        console.log("Token UTXOs from ALL:", tokenUtxosFromAll);
+        const nfts = await Promise.all(tokenUtxos.map(async (utxo: any) => {
+            const commitment = utxo.token?.commitment;
+            let metadata = null;
 
-        // Use whichever has more results
-        const finalUtxos = tokenUtxosFromAll.length > 0 ? tokenUtxosFromAll : utxos;
+            if (commitment) {
+                try {
+                    const ipfsUrl = fromHex(commitment);
+                    if (ipfsUrl.startsWith('ipfs://')) {
+                        const cid = ipfsUrl.substring(7);
+                        const response = await axios.get(`${IPFS_GATEWAY}${cid}`);
+                        metadata = response.data;
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch or parse metadata from IPFS", e);
+                }
+            }
 
-        const nfts = finalUtxos.map((utxo: any) => {
-            const tokenId = utxo.token?.tokenId;
-            const metadata = tokenId ? this.getLocalMetadata(tokenId) : null;
-            console.log(`Token ${tokenId}:`, metadata);
             return {
                 ...utxo,
                 metadata
             };
-        });
+        }));
 
-        console.log("Processed NFTs:", nfts);
         return nfts;
     }
 
-    async updateNFT(tokenId: string, newCommitment: string, newMetadata?: any): Promise<string> {
+    async updateNFT(tokenId: string, newMetadata: any): Promise<string> {
         if (!this.wallet) throw new Error("Wallet not initialized");
 
-        console.log("Attempting to update NFT:", tokenId);
+        const newIpfsCid = await this.uploadToIPFS(newMetadata);
+        const newCommitment = toHex(`ipfs://${newIpfsCid}`);
 
-        // Get wallet address
         // @ts-ignore
         const addr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
 
-        try {
-            // Use tokenMint to create ONE new NFT with updated commitment
-            // This consumes the old NFT and creates exactly one new one
-            const result = await this.wallet.tokenMint(
-                tokenId,  // category ID (same as the token we're updating)
-                [{
-                    cashaddr: addr,
-                    commitment: newCommitment,
-                    capability: 'minting',  // Keep minting capability for future updates
-                    value: 1000
-                }]
-            );
+        const result = await this.wallet.tokenMint(
+            tokenId,
+            [{
+                cashaddr: addr,
+                commitment: newCommitment,
+                capability: 'minting',
+                value: 1000
+            }]
+        );
 
-            console.log("Update result:", result);
-            const txId = result.txId;
-            console.log("Update Transaction ID:", txId);
-
-            // Update local metadata if provided
-            if (newMetadata) {
-                this.saveLocalMetadata(tokenId, newMetadata);
-            }
-
-            return txId || "";
-        } catch (error) {
-            console.error("Transaction Failed:", error);
-            throw error;
-        }
+        return result.txId || "";
     }
 }
 

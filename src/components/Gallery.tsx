@@ -43,10 +43,10 @@ export const Gallery: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {nfts.map((nft) => (
                     <div key={nft.token?.tokenId || Math.random()} className="bg-gray-700 rounded-lg overflow-hidden border border-gray-600">
-                        {nft.metadata?.videoUrl ? (
+                        {nft.metadata?.animation_url ? (
                             <div className="aspect-square w-full bg-black flex items-center justify-center overflow-hidden">
                                 <video
-                                    src={nft.metadata.videoUrl}
+                                    src={nft.metadata.animation_url}
                                     controls
                                     autoPlay
                                     loop
@@ -54,10 +54,10 @@ export const Gallery: React.FC = () => {
                                     className="w-full h-full object-cover"
                                 />
                             </div>
-                        ) : nft.metadata?.imageUrl ? (
+                        ) : nft.metadata?.image ? (
                             <div className="aspect-square w-full bg-black flex items-center justify-center overflow-hidden">
                                 <img
-                                    src={nft.metadata.imageUrl}
+                                    src={nft.metadata.image}
                                     alt={nft.metadata.name}
                                     className="object-cover w-full h-full"
                                     onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/300?text=Error+Loading+Image')}
@@ -93,9 +93,8 @@ export const Gallery: React.FC = () => {
 
 const EditNFT: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }) => {
     const [editing, setEditing] = useState(false);
-    // Determine initial state based on what exists
-    const initialType = nft.metadata?.videoUrl ? 'video' : 'image';
-    const initialUrl = nft.metadata?.videoUrl || nft.metadata?.imageUrl || '';
+    const initialType = nft.metadata?.animation_url ? 'video' : 'image';
+    const initialUrl = nft.metadata?.animation_url || nft.metadata?.image || '';
 
     const [name, setName] = useState(nft.metadata?.name || '');
     const [description, setDescription] = useState(nft.metadata?.description || '');
@@ -117,19 +116,16 @@ const EditNFT: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }
     const handleUpdate = async () => {
         setUpdating(true);
         try {
-            const newCommitment = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
-
             const newMetadata = {
-                ...nft.metadata,
                 name,
                 description,
-                imageUrl: mediaType === 'image' ? mediaUrl : '',
-                videoUrl: mediaType === 'video' ? mediaUrl : ''
+                image: mediaType === 'image' ? mediaUrl : undefined,
+                animation_url: mediaType === 'video' ? mediaUrl : undefined
             };
 
-            await walletService.updateNFT(nft.token.tokenId, newCommitment, newMetadata);
+            await walletService.updateNFT(nft.token.tokenId, newMetadata);
 
-            alert(`Updated! New Commitment: ${newCommitment}`);
+            alert('NFT Updated Successfully!');
             setEditing(false);
             onUpdate();
         } catch (e) {
