@@ -19,4 +19,7 @@ export default defineConfig({
       stream: 'stream-browserify',
     },
   },
+  define: {
+    'global': 'window',
+  },
 })
