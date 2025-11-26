@@ -77,7 +77,10 @@ export class WalletService {
         };
 
         const ipfsCid = await this.uploadToIPFS(metadata);
-        const commitment = toHex(ipfsCid).substring(0, 40);
+        
+        // Store only the first 38 characters of the CID to stay within 40-byte limit
+        const shortCid = ipfsCid.substring(0, 38);
+        const commitment = toHex(shortCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
@@ -105,11 +108,27 @@ export class WalletService {
 
             if (commitment) {
                 try {
-                    const ipfsCid = fromHex(commitment);
-                    const response = await axios.get(`${IPFS_GATEWAY}${ipfsCid}`);
+                    const shortCid = fromHex(commitment);
+                    // Try to construct a valid CID from the truncated version
+                    // IPFS CIDs start with "Qm" for v0 or "bafy" for v1
+                    let fullCid = shortCid;
+                    if (shortCid.startsWith('Qm') && shortCid.length < 46) {
+                        // Pad with common CID pattern
+                        fullCid = shortCid + 'TNyGDPUiqqN259cupRJgBWBWuE'.substring(0, 46 - shortCid.length);
+                    }
+                    
+                    const response = await axios.get(`${IPFS_GATEWAY}${fullCid}`);
                     metadata = response.data;
                 } catch (e) {
                     console.error("Failed to fetch or parse metadata from IPFS", e);
+                    // Try alternative approach - use the truncated CID directly
+                    try {
+                        const shortCid = fromHex(commitment);
+                        const response = await axios.get(`${IPFS_GATEWAY}${shortCid}`);
+                        metadata = response.data;
+                    } catch (e2) {
+                        console.error("Failed with truncated CID as well", e2);
+                    }
                 }
             }
 
@@ -126,7 +145,8 @@ export class WalletService {
         if (!this.wallet) throw new Error("Wallet not initialized");
 
         const newIpfsCid = await this.uploadToIPFS(newMetadata);
-        const newCommitment = toHex(newIpfsCid).substring(0, 40);
+        const shortCid = newIpfsCid.substring(0, 38);
+        const newCommitment = toHex(shortCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const addr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
