@@ -6,8 +6,7 @@ import { CID } from 'multiformats/cid';
 Config.EnforceCashToken = true;
 
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
-// Use Pinata's dedicated gateway for better reliability
-const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
+
 
 // Convert IPFS CID to hex-encoded bytes for commitment (stays within 40-byte limit)
 const cidToHex = (cidString: string): string => {
@@ -21,6 +20,34 @@ const hexToCid = (hex: string): string => {
     const bytes = Buffer.from(hex, 'hex');
     const cid = CID.decode(bytes);
     return cid.toString();
+};
+
+
+// List of public IPFS gateways to try in order
+const IPFS_GATEWAYS = [
+    'https://gateway.pinata.cloud/ipfs/',
+    'https://ipfs.io/ipfs/',
+    'https://dweb.link/ipfs/',
+    'https://cloudflare-ipfs.com/ipfs/'
+];
+
+// Helper to fetch from IPFS with retries across multiple gateways
+const fetchFromIPFS = async (cid: string): Promise<any> => {
+    let lastError;
+
+    for (const gateway of IPFS_GATEWAYS) {
+        try {
+            const response = await axios.get(`${gateway}${cid}`, {
+                timeout: 5000 // 5 second timeout per gateway
+            });
+            return response.data;
+        } catch (e: any) {
+            // If it's a 429 (Too Many Requests) or network error, try next gateway
+            lastError = e;
+            // Continue to next gateway
+        }
+    }
+    throw lastError;
 };
 
 
@@ -142,17 +169,15 @@ export class WalletService {
                     // Decode CID from hex-encoded bytes
                     const ipfsCid = hexToCid(commitment);
 
-                    // Fetch metadata from IPFS with timeout
-                    const response = await axios.get(`${IPFS_GATEWAY}${ipfsCid}`, {
-                        timeout: 10000 // 10 second timeout
-                    });
-                    metadata = response.data;
+                    // Fetch metadata using multi-gateway retry logic
+                    metadata = await fetchFromIPFS(ipfsCid);
                 } catch (e: any) {
                     // Provide detailed error information
                     const errorType = e.code === 'ECONNABORTED' ? 'Timeout' :
                         e.response?.status === 404 ? 'Not Found' :
-                            e.response?.status === 500 ? 'Gateway Error' :
-                                'Network Error';
+                            e.response?.status === 429 ? 'Rate Limited' :
+                                e.response?.status === 500 ? 'Gateway Error' :
+                                    'Network Error';
 
                     metadataError = {
                         type: errorType,
