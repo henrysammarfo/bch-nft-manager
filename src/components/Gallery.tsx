@@ -42,7 +42,7 @@ export const Gallery: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {nfts.map((nft) => (
-                    <div key={nft.token?.tokenId || Math.random()} className="bg-gray-700 rounded-lg overflow-hidden border border-gray-600">
+                    <div key={nft.token?.tokenId || Math.random()} className="bg-gray-700 rounded-lg overflow-hidden border border-gray-600 flex flex-col">
                         {nft.metadata?.animation_url ? (
                             <div className="aspect-square w-full bg-black flex items-center justify-center overflow-hidden">
                                 <video
@@ -69,9 +69,9 @@ export const Gallery: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="p-4">
+                        <div className="p-4 flex flex-col flex-grow">
                             <h3 className="font-bold text-lg truncate">{nft.metadata?.name || 'Unknown Token'}</h3>
-                            <p className="text-gray-400 text-sm mb-2 line-clamp-2">{nft.metadata?.description || 'No description'}</p>
+                            <p className="text-gray-400 text-sm mb-2 line-clamp-2 flex-grow">{nft.metadata?.description || 'No description'}</p>
 
                             <div className="text-xs text-gray-500 font-mono truncate">
                                 ID: {nft.token?.tokenId}
@@ -81,7 +81,7 @@ export const Gallery: React.FC = () => {
                             </div>
 
                             <div className="mt-3 pt-3 border-t border-gray-600">
-                                <EditNFT nft={nft} onUpdate={fetchNFTs} />
+                                <ActionButtons nft={nft} onUpdate={fetchNFTs} />
                             </div>
                         </div>
                     </div>
@@ -91,8 +91,40 @@ export const Gallery: React.FC = () => {
     );
 };
 
-const EditNFT: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }) => {
-    const [editing, setEditing] = useState(false);
+const ActionButtons: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }) => {
+    const [mode, setMode] = useState<'view' | 'edit' | 'transfer'>('view');
+
+    const handleDelete = async () => {
+        if (window.confirm('Are you sure you want to permanently delete this NFT? This action cannot be undone.')) {
+            try {
+                await walletService.burnNFT(nft);
+                alert('NFT burned successfully!');
+                onUpdate();
+            } catch (e) {
+                console.error(e);
+                alert('Error burning NFT');
+            }
+        }
+    };
+
+    if (mode === 'edit') {
+        return <EditNFT nft={nft} onUpdate={onUpdate} onCancel={() => setMode('view')} />;
+    }
+
+    if (mode === 'transfer') {
+        return <TransferNFT nft={nft} onUpdate={onUpdate} onCancel={() => setMode('view')} />;
+    }
+
+    return (
+        <div className="flex gap-2">
+            <button onClick={() => setMode('edit')} className="text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-white">Edit</button>
+            <button onClick={() => setMode('transfer')} className="text-xs bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded text-white">Transfer</button>
+            <button onClick={handleDelete} className="text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-white">Delete</button>
+        </div>
+    );
+};
+
+const EditNFT: React.FC<{ nft: any, onUpdate: () => void, onCancel: () => void }> = ({ nft, onUpdate, onCancel }) => {
     const initialType = nft.metadata?.animation_url ? 'video' : 'image';
     const initialUrl = nft.metadata?.animation_url || nft.metadata?.image || '';
 
@@ -101,17 +133,6 @@ const EditNFT: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }
     const [mediaType, setMediaType] = useState<'image' | 'video'>(initialType);
     const [mediaUrl, setMediaUrl] = useState(initialUrl);
     const [updating, setUpdating] = useState(false);
-
-    if (!editing) {
-        return (
-            <button
-                onClick={() => setEditing(true)}
-                className="text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-white"
-            >
-                Edit / Update
-            </button>
-        );
-    }
 
     const handleUpdate = async () => {
         setUpdating(true);
@@ -126,8 +147,8 @@ const EditNFT: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }
             await walletService.updateNFT(nft.token.tokenId, newMetadata);
 
             alert('NFT Updated Successfully!');
-            setEditing(false);
             onUpdate();
+            onCancel();
         } catch (e) {
             console.error(e);
             alert('Error updating NFT');
@@ -192,17 +213,53 @@ const EditNFT: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }
             </div>
 
             <div className="flex gap-2 pt-2">
-                <button
-                    onClick={handleUpdate}
-                    disabled={updating}
-                    className="flex-1 text-xs bg-green-600 hover:bg-green-700 px-2 py-1 rounded"
-                >
+                <button onClick={handleUpdate} disabled={updating} className="flex-1 text-xs bg-green-600 hover:bg-green-700 px-2 py-1 rounded">
                     {updating ? 'Saving...' : 'Save Changes'}
                 </button>
-                <button
-                    onClick={() => setEditing(false)}
-                    className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded"
-                >
+                <button onClick={onCancel} className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const TransferNFT: React.FC<{ nft: any, onUpdate: () => void, onCancel: () => void }> = ({ nft, onUpdate, onCancel }) => {
+    const [recipient, setRecipient] = useState('');
+    const [transferring, setTransferring] = useState(false);
+
+    const handleTransfer = async () => {
+        if (!recipient) {
+            alert('Please enter a recipient address.');
+            return;
+        }
+        setTransferring(true);
+        try {
+            await walletService.transferNFT(recipient, nft.token.tokenId);
+            alert('NFT transferred successfully!');
+            onUpdate();
+            onCancel();
+        } catch (e) {
+            console.error(e);
+            alert('Error transferring NFT');
+        }
+        setTransferring(false);
+    };
+
+    return (
+        <div className="space-y-2">
+            <input
+                type="text"
+                value={recipient}
+                onChange={(e) => setRecipient(e.target.value)}
+                className="w-full text-xs p-1 rounded bg-gray-900 border border-gray-500 text-white"
+                placeholder="bchtest:q..."
+            />
+            <div className="flex gap-2 pt-2">
+                <button onClick={handleTransfer} disabled={transferring} className="flex-1 text-xs bg-green-600 hover:bg-green-700 px-2 py-1 rounded">
+                    {transferring ? 'Sending...' : 'Confirm Transfer'}
+                </button>
+                <button onClick={onCancel} className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded">
                     Cancel
                 </button>
             </div>

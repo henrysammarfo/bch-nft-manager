@@ -137,6 +137,42 @@ export class WalletService {
 
         return result.txId || "";
     }
+
+    async burnNFT(nft: any): Promise<string> {
+        if (!this.wallet) throw new Error("Wallet not initialized");
+
+        const result = await this.wallet.tokenBurn(
+            {
+                tokenId: nft.token.tokenId,
+                capability: nft.token.capability,
+                commitment: nft.token.commitment,
+            },
+            "burn", // Note field
+        );
+
+        if (!result.txId) {
+            throw new Error("Burn transaction failed, no txId returned");
+        }
+        return result.txId;
+    }
+
+    async transferNFT(recipientAddress: string, tokenId: string): Promise<string> {
+        if (!this.wallet) throw new Error("Wallet not initialized");
+
+        const result = await this.wallet.send([
+            {
+                cashaddr: recipientAddress,
+                value: 1000, // Dust value
+                unit: 'sat',
+                tokenId: tokenId,
+            },
+        ]);
+
+        if (!result.txId) {
+            throw new Error("Transfer transaction failed, no txId returned");
+        }
+        return result.txId;
+    }
 }
 
 export const walletService = new WalletService();
