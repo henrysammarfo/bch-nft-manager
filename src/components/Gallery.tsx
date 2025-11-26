@@ -41,57 +41,84 @@ export const Gallery: React.FC = () => {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {nfts.map((nft) => (
-                    <div key={nft.token?.tokenId || Math.random()} className="bg-gray-700 rounded-lg overflow-hidden border border-gray-600 flex flex-col">
-                        {nft.metadata?.animation_url ? (
-                            <div className="aspect-square w-full bg-black flex items-center justify-center overflow-hidden">
-                                <video
-                                    src={nft.metadata.animation_url}
-                                    controls
-                                    autoPlay
-                                    loop
-                                    muted
-                                    className="w-full h-full object-cover"
-                                />
-                            </div>
-                        ) : nft.metadata?.image ? (
-                            <div className="aspect-square w-full bg-black flex items-center justify-center overflow-hidden">
-                                <img
-                                    src={nft.metadata.image}
-                                    alt={nft.metadata.name}
-                                    className="object-cover w-full h-full"
-                                    onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/300?text=Error+Loading+Image')}
-                                />
-                            </div>
-                        ) : (
-                            <div className="aspect-square w-full bg-gray-900 flex items-center justify-center text-gray-600">
-                                No Media
-                            </div>
-                        )}
+                {nfts.map((nft) => {
+                    const hasMetadata = nft.metadata !== null;
+                    const hasCommitment = nft.token?.commitment;
 
-                        <div className="p-4 flex flex-col flex-grow">
-                            <h3 className="font-bold text-lg truncate">{nft.metadata?.name || 'Unknown Token'}</h3>
-                            <p className="text-gray-400 text-sm mb-2 line-clamp-2 flex-grow">{nft.metadata?.description || 'No description'}</p>
+                    return (
+                        <div key={nft.token?.tokenId || Math.random()} className="bg-gray-700 rounded-lg overflow-hidden border border-gray-600 flex flex-col">
+                            {/* Metadata Loading Error Badge */}
+                            {!hasMetadata && hasCommitment && (
+                                <div
+                                    className="bg-yellow-600 text-yellow-100 text-xs px-3 py-1 flex items-center gap-2"
+                                    title={nft.metadataError ? `Error: ${nft.metadataError.type}\nCID: ${nft.metadataError.cid}` : 'Metadata unavailable'}
+                                >
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                    <span>
+                                        {nft.metadataError ? `${nft.metadataError.type}: Metadata unavailable` : 'Metadata unavailable'}
+                                    </span>
+                                </div>
+                            )}
 
-                            <div className="text-xs text-gray-500 font-mono truncate">
-                                ID: {nft.token?.tokenId}
-                            </div>
-                            <div className="text-xs text-gray-500 font-mono mt-1">
-                                Commitment: {nft.token?.commitment || 'None'}
-                            </div>
+                            {nft.metadata?.animation_url ? (
+                                <div className="aspect-square w-full bg-black flex items-center justify-center overflow-hidden">
+                                    <video
+                                        src={nft.metadata.animation_url}
+                                        controls
+                                        autoPlay
+                                        loop
+                                        muted
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                            ) : nft.metadata?.image ? (
+                                <div className="aspect-square w-full bg-black flex items-center justify-center overflow-hidden">
+                                    <img
+                                        src={nft.metadata.image}
+                                        alt={nft.metadata.name}
+                                        className="object-cover w-full h-full"
+                                        onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/300?text=Error+Loading+Image')}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="aspect-square w-full bg-gray-900 flex items-center justify-center">
+                                    <div className="text-center p-4">
+                                        <svg className="w-16 h-16 mx-auto text-gray-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        <p className="text-gray-600 text-sm">No Media</p>
+                                    </div>
+                                </div>
+                            )}
 
-                            <div className="mt-3 pt-3 border-t border-gray-600">
-                                <ActionButtons nft={nft} onUpdate={fetchNFTs} />
+                            <div className="p-4 flex flex-col flex-grow">
+                                <h3 className="font-bold text-lg truncate">{nft.metadata?.name || 'Unknown Token'}</h3>
+                                <p className="text-gray-400 text-sm mb-2 line-clamp-2 flex-grow">{nft.metadata?.description || 'No description'}</p>
+
+                                <div className="text-xs text-gray-500 font-mono truncate">
+                                    ID: {nft.token?.tokenId}
+                                </div>
+                                {hasCommitment && (
+                                    <div className="text-xs text-gray-500 font-mono mt-1 truncate" title={nft.token.commitment}>
+                                        Commitment: {nft.token.commitment.substring(0, 20)}...
+                                    </div>
+                                )}
+
+                                <div className="mt-3 pt-3 border-t border-gray-600">
+                                    <ActionButtons nft={nft} onUpdate={fetchNFTs} hasMetadata={hasMetadata} />
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
 };
 
-const ActionButtons: React.FC<{ nft: any, onUpdate: () => void }> = ({ nft, onUpdate }) => {
+const ActionButtons: React.FC<{ nft: any, onUpdate: () => void, hasMetadata: boolean }> = ({ nft, onUpdate }) => {
     const [mode, setMode] = useState<'view' | 'edit' | 'transfer'>('view');
 
     const handleDelete = async () => {

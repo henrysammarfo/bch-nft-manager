@@ -5,7 +5,8 @@ import axios from 'axios';
 Config.EnforceCashToken = true;
 
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
-const IPFS_GATEWAY = 'https://ipfs.io/ipfs/';
+// Use Pinata's dedicated gateway for better reliability
+const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
 
 const toHex = (str: string) => Buffer.from(str, 'utf8').toString('hex');
 
@@ -68,10 +69,10 @@ export class WalletService {
 
     async consolidateUTXOs(): Promise<string> {
         if (!this.wallet) throw new Error("Wallet not initialized");
-        
+
         // @ts-expect-error mainnet-js is not fully typed
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
-        
+
         const result = await this.wallet.sendMax(walletAddr);
         return result.txId || "";
     }
@@ -96,10 +97,9 @@ export class WalletService {
         };
 
         const ipfsCid = await this.uploadToIPFS(metadata);
-        
-        // Store only the first 38 characters of the CID to stay within 40-byte limit
-        const shortCid = ipfsCid.substring(0, 38);
-        const commitment = toHex(shortCid);
+
+        // Store the full CID (CIDv0 hashes are typically 46 chars, well under 40-byte hex limit)
+        const commitment = toHex(ipfsCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
@@ -124,35 +124,43 @@ export class WalletService {
         const nfts = await Promise.all(tokenUtxos.map(async (utxo: any) => {
             const commitment = utxo.token?.commitment;
             let metadata = null;
+            let metadataError = null;
 
             if (commitment) {
                 try {
-                    const shortCid = fromHex(commitment);
-                    
-                    // Try multiple common CID patterns
-                    const candidates = [
-                        shortCid, // Direct truncated CID
-                        shortCid + 'TNyGDPUiqqN259cupRJgBWBWuE'.substring(0, 46 - shortCid.length), // Padded CID
-                        'QmcTNyGDPUiqqN259cupRJgBWBWuE'.substring(0, 46 - shortCid.length) + shortCid.substring(2), // Reconstructed
-                    ];
-                    
-                    for (const candidate of candidates) {
-                        try {
-                            const response = await axios.get(`${IPFS_GATEWAY}${candidate}`);
-                            metadata = response.data;
-                            break; // Success, exit the loop
-                        } catch {
-                            continue; // Try next candidate
-                        }
-                    }
-                } catch (e) {
-                    console.error("Failed to fetch or parse metadata from IPFS", e);
+                    // Decode the full CID from the commitment
+                    const ipfsCid = fromHex(commitment);
+
+                    // Fetch metadata from IPFS with timeout
+                    const response = await axios.get(`${IPFS_GATEWAY}${ipfsCid}`, {
+                        timeout: 10000 // 10 second timeout
+                    });
+                    metadata = response.data;
+                } catch (e: any) {
+                    // Provide detailed error information
+                    const errorType = e.code === 'ECONNABORTED' ? 'Timeout' :
+                        e.response?.status === 404 ? 'Not Found' :
+                            e.response?.status === 500 ? 'Gateway Error' :
+                                'Network Error';
+
+                    metadataError = {
+                        type: errorType,
+                        message: e.message,
+                        cid: fromHex(commitment)
+                    };
+
+                    console.warn(`[NFT ${utxo.token?.tokenId}] Failed to load metadata:`, {
+                        error: errorType,
+                        cid: metadataError.cid,
+                        details: e.message
+                    });
                 }
             }
 
             return {
                 ...utxo,
-                metadata
+                metadata,
+                metadataError
             };
         }));
 
@@ -163,8 +171,8 @@ export class WalletService {
         if (!this.wallet) throw new Error("Wallet not initialized");
 
         const newIpfsCid = await this.uploadToIPFS(newMetadata);
-        const shortCid = newIpfsCid.substring(0, 38);
-        const newCommitment = toHex(shortCid);
+        // Store the full CID
+        const newCommitment = toHex(newIpfsCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const addr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
