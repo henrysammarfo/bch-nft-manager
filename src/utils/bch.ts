@@ -1,16 +1,14 @@
 import { TestNetWallet, Config } from 'mainnet-js';
 import axios from 'axios';
 
-// @ts-ignore
+// @ts-expect-error mainnet-js is not fully typed
 Config.EnforceCashToken = true;
 
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
 const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
 
-// Helper to convert string to hex
 const toHex = (str: string) => Buffer.from(str, 'utf8').toString('hex');
 
-// Helper to convert hex to string
 const fromHex = (hex: string) => Buffer.from(hex, 'hex').toString('utf8');
 
 
@@ -32,17 +30,15 @@ export class WalletService {
 
     async importWallet(wifOrSeed: string): Promise<void> {
         if (wifOrSeed.split(' ').length > 1) {
-            // It's likely a seed phrase
             this.wallet = await TestNetWallet.fromSeed(wifOrSeed);
         } else {
-            // It's likely a WIF
             this.wallet = await TestNetWallet.fromWIF(wifOrSeed);
         }
     }
 
     async getAddress(): Promise<string> {
         if (!this.wallet) throw new Error("Wallet not initialized");
-        // @ts-ignore
+        // @ts-expect-error mainnet-js is not fully typed
         return this.wallet.cashaddr || this.wallet.getCashaddr?.();
     }
 
@@ -83,7 +79,7 @@ export class WalletService {
         const ipfsCid = await this.uploadToIPFS(metadata);
         const commitment = toHex(`ipfs://${ipfsCid}`);
 
-        // @ts-ignore
+        // @ts-expect-error mainnet-js is not fully typed
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
 
         const result = await this.wallet.tokenGenesis({
@@ -135,7 +131,7 @@ export class WalletService {
         const newIpfsCid = await this.uploadToIPFS(newMetadata);
         const newCommitment = toHex(`ipfs://${newIpfsCid}`);
 
-        // @ts-ignore
+        // @ts-expect-error mainnet-js is not fully typed
         const addr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
 
         const result = await this.wallet.tokenMint(
@@ -160,7 +156,7 @@ export class WalletService {
                 capability: nft.token.capability,
                 commitment: nft.token.commitment,
             },
-            "burn", // Note field
+            "burn",
         );
 
         if (!result.txId) {
@@ -175,7 +171,7 @@ export class WalletService {
         const result = await this.wallet.send([
             {
                 cashaddr: recipientAddress,
-                value: 1000, // Dust value
+                value: 1000,
                 unit: 'sat',
                 tokenId: tokenId,
             },
