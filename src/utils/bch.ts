@@ -77,7 +77,7 @@ export class WalletService {
         };
 
         const ipfsCid = await this.uploadToIPFS(metadata);
-        const commitment = toHex(`ipfs://${ipfsCid}`);
+        const commitment = toHex(ipfsCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
@@ -105,12 +105,9 @@ export class WalletService {
 
             if (commitment) {
                 try {
-                    const ipfsUrl = fromHex(commitment);
-                    if (ipfsUrl.startsWith('ipfs://')) {
-                        const cid = ipfsUrl.substring(7);
-                        const response = await axios.get(`${IPFS_GATEWAY}${cid}`);
-                        metadata = response.data;
-                    }
+                    const ipfsCid = fromHex(commitment);
+                    const response = await axios.get(`${IPFS_GATEWAY}${ipfsCid}`);
+                    metadata = response.data;
                 } catch (e) {
                     console.error("Failed to fetch or parse metadata from IPFS", e);
                 }
@@ -129,7 +126,7 @@ export class WalletService {
         if (!this.wallet) throw new Error("Wallet not initialized");
 
         const newIpfsCid = await this.uploadToIPFS(newMetadata);
-        const newCommitment = toHex(`ipfs://${newIpfsCid}`);
+        const newCommitment = toHex(newIpfsCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const addr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
