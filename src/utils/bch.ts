@@ -17,14 +17,27 @@ const fromHex = (hex: string) => Buffer.from(hex, 'hex').toString('utf8');
 export class WalletService {
     private wallet: TestNetWallet | null = null;
 
-    async createWallet(): Promise<string> {
+    async createWallet(): Promise<{ wif: string, seed: string }> {
         this.wallet = await TestNetWallet.newRandom();
-        // @ts-ignore
-        return (this.wallet as any).privateKeyWif || (this.wallet as any).getWif?.();
+        const walletDetails = this.wallet as TestNetWallet & { privateKeyWif?: string, getWif?: () => string, mnemonic?: string };
+        const wif: string | undefined = walletDetails.privateKeyWif || walletDetails.getWif?.();
+        const seed: string | undefined = walletDetails.mnemonic;
+
+        if (!wif || !seed) {
+            throw new Error("Wallet creation failed, could not retrieve WIF or seed phrase.");
+        }
+
+        return { wif, seed };
     }
 
-    async importWallet(wif: string): Promise<void> {
-        this.wallet = await TestNetWallet.fromWIF(wif);
+    async importWallet(wifOrSeed: string): Promise<void> {
+        if (wifOrSeed.split(' ').length > 1) {
+            // It's likely a seed phrase
+            this.wallet = await TestNetWallet.fromSeed(wifOrSeed);
+        } else {
+            // It's likely a WIF
+            this.wallet = await TestNetWallet.fromWIF(wifOrSeed);
+        }
     }
 
     async getAddress(): Promise<string> {
