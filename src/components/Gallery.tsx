@@ -262,7 +262,7 @@ const TransferNFT: React.FC<{ nft: any, onUpdate: () => void, onCancel: () => vo
         }
         setTransferring(true);
         try {
-            await walletService.transferNFT(recipient, nft.token.tokenId);
+            await walletService.transferNFT(recipient, nft.token.tokenId, nft.token.capability);
             alert('NFT transferred successfully!');
             onUpdate();
             onCancel();

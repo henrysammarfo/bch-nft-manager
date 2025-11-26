@@ -244,17 +244,21 @@ export class WalletService {
         return result.txId;
     }
 
-    async transferNFT(recipientAddress: string, tokenId: string): Promise<string> {
+    async transferNFT(recipientAddress: string, tokenId: string, capability?: string): Promise<string> {
         if (!this.wallet) throw new Error("Wallet not initialized");
 
-        const result = await this.wallet.send([
-            {
-                cashaddr: recipientAddress,
-                value: 1000,
-                unit: 'sat',
-                tokenId: tokenId,
-            },
-        ]);
+        const sendRequest: any = {
+            cashaddr: recipientAddress,
+            value: 1000,
+            unit: 'sat',
+            tokenId: tokenId,
+        };
+
+        if (capability) {
+            sendRequest.capability = capability;
+        }
+
+        const result = await this.wallet.send([sendRequest]);
 
         if (!result.txId) {
             throw new Error("Transfer transaction failed, no txId returned");
