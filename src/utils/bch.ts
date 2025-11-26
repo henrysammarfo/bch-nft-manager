@@ -5,7 +5,7 @@ import axios from 'axios';
 Config.EnforceCashToken = true;
 
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
-const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
+const IPFS_GATEWAY = 'https://ipfs.io/ipfs/';
 
 const toHex = (str: string) => Buffer.from(str, 'utf8').toString('hex');
 
@@ -128,26 +128,25 @@ export class WalletService {
             if (commitment) {
                 try {
                     const shortCid = fromHex(commitment);
-                    // Try to construct a valid CID from the truncated version
-                    // IPFS CIDs start with "Qm" for v0 or "bafy" for v1
-                    let fullCid = shortCid;
-                    if (shortCid.startsWith('Qm') && shortCid.length < 46) {
-                        // Pad with common CID pattern
-                        fullCid = shortCid + 'TNyGDPUiqqN259cupRJgBWBWuE'.substring(0, 46 - shortCid.length);
-                    }
                     
-                    const response = await axios.get(`${IPFS_GATEWAY}${fullCid}`);
-                    metadata = response.data;
+                    // Try multiple common CID patterns
+                    const candidates = [
+                        shortCid, // Direct truncated CID
+                        shortCid + 'TNyGDPUiqqN259cupRJgBWBWuE'.substring(0, 46 - shortCid.length), // Padded CID
+                        'QmcTNyGDPUiqqN259cupRJgBWBWuE'.substring(0, 46 - shortCid.length) + shortCid.substring(2), // Reconstructed
+                    ];
+                    
+                    for (const candidate of candidates) {
+                        try {
+                            const response = await axios.get(`${IPFS_GATEWAY}${candidate}`);
+                            metadata = response.data;
+                            break; // Success, exit the loop
+                        } catch {
+                            continue; // Try next candidate
+                        }
+                    }
                 } catch (e) {
                     console.error("Failed to fetch or parse metadata from IPFS", e);
-                    // Try alternative approach - use the truncated CID directly
-                    try {
-                        const shortCid = fromHex(commitment);
-                        const response = await axios.get(`${IPFS_GATEWAY}${shortCid}`);
-                        metadata = response.data;
-                    } catch (e2) {
-                        console.error("Failed with truncated CID as well", e2);
-                    }
                 }
             }
 
