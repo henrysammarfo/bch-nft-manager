@@ -1,5 +1,6 @@
 import { TestNetWallet, Config } from 'mainnet-js';
 import axios from 'axios';
+import { CID } from 'multiformats/cid';
 
 // @ts-expect-error mainnet-js is not fully typed
 Config.EnforceCashToken = true;
@@ -8,9 +9,19 @@ const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
 // Use Pinata's dedicated gateway for better reliability
 const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
 
-const toHex = (str: string) => Buffer.from(str, 'utf8').toString('hex');
+// Convert IPFS CID to hex-encoded bytes for commitment (stays within 40-byte limit)
+const cidToHex = (cidString: string): string => {
+    const cid = CID.parse(cidString);
+    // Get the raw bytes of the CID (34 bytes for CIDv0)
+    return Buffer.from(cid.bytes).toString('hex');
+};
 
-const fromHex = (hex: string) => Buffer.from(hex, 'hex').toString('utf8');
+// Convert hex-encoded CID bytes back to CID string
+const hexToCid = (hex: string): string => {
+    const bytes = Buffer.from(hex, 'hex');
+    const cid = CID.decode(bytes);
+    return cid.toString();
+};
 
 
 export class WalletService {
@@ -98,8 +109,8 @@ export class WalletService {
 
         const ipfsCid = await this.uploadToIPFS(metadata);
 
-        // Store the full CID (CIDv0 hashes are typically 46 chars, well under 40-byte hex limit)
-        const commitment = toHex(ipfsCid);
+        // Store CID as raw bytes (34 bytes for CIDv0, well within 40-byte limit)
+        const commitment = cidToHex(ipfsCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
@@ -128,8 +139,8 @@ export class WalletService {
 
             if (commitment) {
                 try {
-                    // Decode the full CID from the commitment
-                    const ipfsCid = fromHex(commitment);
+                    // Decode CID from hex-encoded bytes
+                    const ipfsCid = hexToCid(commitment);
 
                     // Fetch metadata from IPFS with timeout
                     const response = await axios.get(`${IPFS_GATEWAY}${ipfsCid}`, {
@@ -146,7 +157,7 @@ export class WalletService {
                     metadataError = {
                         type: errorType,
                         message: e.message,
-                        cid: fromHex(commitment)
+                        cid: hexToCid(commitment)
                     };
 
                     console.warn(`[NFT ${utxo.token?.tokenId}] Failed to load metadata:`, {
@@ -171,8 +182,8 @@ export class WalletService {
         if (!this.wallet) throw new Error("Wallet not initialized");
 
         const newIpfsCid = await this.uploadToIPFS(newMetadata);
-        // Store the full CID
-        const newCommitment = toHex(newIpfsCid);
+        // Store CID as raw bytes
+        const newCommitment = cidToHex(newIpfsCid);
 
         // @ts-expect-error mainnet-js is not fully typed
         const addr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
