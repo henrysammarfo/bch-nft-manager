@@ -66,8 +66,27 @@ export class WalletService {
         return response.data.IpfsHash;
     }
 
+    async consolidateUTXOs(): Promise<string> {
+        if (!this.wallet) throw new Error("Wallet not initialized");
+        
+        // @ts-expect-error mainnet-js is not fully typed
+        const walletAddr = this.wallet.cashaddr || this.wallet.getCashaddr?.();
+        
+        const result = await this.wallet.sendMax(walletAddr);
+        return result.txId || "";
+    }
+
     async mintNFT(name: string, description: string, imageUrl: string, videoUrl?: string): Promise<string> {
         if (!this.wallet) throw new Error("Wallet not initialized");
+
+        // First, try to consolidate UTXOs to ensure we have a vout=0 UTXO
+        try {
+            await this.consolidateUTXOs();
+            // Wait a moment for the transaction to process
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (e) {
+            console.warn("UTXO consolidation failed, proceeding anyway:", e);
+        }
 
         const metadata = {
             name,
